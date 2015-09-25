@@ -126,12 +126,13 @@ func (v *baseFutureCall) Wait() {
 // But will not run it. Instead, it return the future immediately
 // and a VoidFunc (func (){}). Caller can call the VoidFunc() to 
 // Cause the Future to materialize.
+//
 // Example:
-// fut, f := MakeFuturePipe(func(i interface{}) interface{} {
-//    return i.(int) + 1
-// }, 6)
-// go f() <= this will start the actual func - without it the fut will never be ready
-// fmt.Println(fut.Wait())
+//   fut, f := MakeFuturePipe(func(i interface{}) interface{} {
+//     return i.(int) + 1
+//   }, 6)
+//   go f() <= this will start the actual func - without it the fut will never be ready
+//   fmt.Println(fut.Wait())
 // Note the f() is required before the fut.Wait() 
 func MakeFuturePipe(f MapFunc, argument interface{}) (Future, VoidFunc) {
 	c := make(chan interface{}, 1)
@@ -165,6 +166,7 @@ func MakeFuture(f MapFunc, argument interface{}) Future {
 
 /*
 Same as MakeFuturePipe, but the result FutureCall doesn't carry value
+
 In fact it is impemented using MakeFuturePipe with wrapper func
 */
 func MakeFutureCallPipe(f MapCallFunc, argument interface{}) (FutureCall, VoidFunc) {
@@ -177,6 +179,7 @@ func MakeFutureCallPipe(f MapCallFunc, argument interface{}) (FutureCall, VoidFu
 
 /*
 Same as MakeFuture, but the result FutureCall doesn't carry value
+
 In fact it is impemented using MakeFutureCallPipe with wrapper func
 */
 func MakeFutureCall(f MapCallFunc, argument interface{}) FutureCall {
@@ -189,37 +192,49 @@ func MakeFutureCall(f MapCallFunc, argument interface{}) FutureCall {
 type ParallelExecutor interface {
 	/*
 	Start processing jobs. Note that jobs can be added before Start()
+	
 	but without start, Future will never materialize
+	
 	You can still add jobs after started. You can start before adding jobs even
 	*/
 	Start()
 
 	/*
 	Submit a producer func and get the result.
+	
 	The Future may be ready in the future. Or might be ready when you use it
+	
 	call result.Ready() to check whether it is completed
+	
 	call result.WaitT to wait for completion, with a timeout
+	
 	call result.Wait to wait forever for completion
 	*/
 	Submit(f ProducerFunc) Future
 
 	/*
 	Submit a void func for executing. 
+	
 	The result represent a Future Completion status of the VoidFunc
+	
 	call result.Ready() to check whether it is completed
+	
 	call result.WaitT to wait for completion, with a timeout
+	
 	call result.Wait to wait forever for completion
 	*/
 	Call(f VoidFunc) FutureCall
 
 	/*
 	Stop accepting new calls, but all submitted tasks will be executed
+	
 	It is essentially closing the task queue channel
 	*/
 	Stop()
 
 	/*
 	Wait until all calls/funcs are done
+	
 	You must call Stop() first otherwise the goroutines will never end
 	*/
 	Wait()
@@ -227,9 +242,13 @@ type ParallelExecutor interface {
 	/*
 	Active threads.
 	Before start, it should be 0
+	
 	After start, it will quickly jump to Parallel settings
+	
 	After stop, it will slowly drop to 0.
+	
 	Use as a indicator only, don't assume 0 means the 
+	
 	Executor done all jobs. Instead, use Stop() and Wait()
 	*/
 	Active() int
