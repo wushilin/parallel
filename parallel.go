@@ -9,8 +9,10 @@ import (
 	"time"
 )
 
-// It is like a map function, but produce no output
-// a->fmt.Println(a) is a MapCallFunc
+/*
+ It is like a map function, but produce no output
+a->fmt.Println(a) is a MapCallFunc
+*/
 type MapCallFunc func(x interface{})
 
 // A Map func tranform value
@@ -28,22 +30,26 @@ type Future interface {
 	// Test wehther the value is ready
 	Ready() bool
 
-	// Wait for max of timeout milliseconds
-	// for a value and return whether a value present or not
-	// If second return value is false, the value returned 
-	// should be nil. Do not use the value unless the second 
-	// value is true
+	/*
+	Wait for max of timeout milliseconds
+	for a value and return whether a value present or not
+	If second return value is false, the value returned 
+	should be nil. Do not use the value unless the second 
+	value is true
+	*/
 	WaitT(timeoutms int) (interface{}, bool)
 
 	// Wait indefinitely for the value
 	Wait() interface{}
 }
 
-// A FutureCall represent a future completion state of a Call.
-// Call Ready() to determin if he Call is done
-// Call WaitT(xxx int) to check if the call is complete after the timeout
-// Note if the call returns earlier than timeout, the WaitT will return immediately
-// Call Wait() to wait indefinitely for the call to finish.
+/*
+A FutureCall represent a future completion state of a Call.
+Call Ready() to determin if he Call is done
+Call WaitT(xxx int) to check if the call is complete after the timeout
+Note if the call returns earlier than timeout, the WaitT will return immediately
+Call Wait() to wait indefinitely for the call to finish.
+*/
 type FutureCall interface {
 	// test whether the future is ready
 	Ready() bool
@@ -143,19 +149,24 @@ func MakeFuturePipe(f MapFunc, argument interface{}) (Future, VoidFunc) {
 	return &baseFuture{new(sync.Mutex), c, false, nil}, ff
 }
 
-// Make a function call as a future. A separate goroutine will be started to execute the code
-// It is the same as:
-// fut, pipe := MakeFuturePipe(f, argument)
-// go pipe()
-// You can retrieve the result Future in caller goroutine sometime in the future
+/* 
+Make a function call as a future. A separate goroutine will be started to execute the code
+It is the same as:
+  fut, pipe := MakeFuturePipe(f, argument)
+  go pipe()
+
+You can retrieve the result Future in caller goroutine sometime in the future
+*/
 func MakeFuture(f MapFunc, argument interface{}) Future {
 	result, pipe := MakeFuturePipe(f, argument)
 	go pipe()
 	return result
 }
 
-// Same as MakeFuturePipe, but the result FutureCall doesn't carry value
-// In fact it is impemented using MakeFuturePipe with wrapper func
+/*
+Same as MakeFuturePipe, but the result FutureCall doesn't carry value
+In fact it is impemented using MakeFuturePipe with wrapper func
+*/
 func MakeFutureCallPipe(f MapCallFunc, argument interface{}) (FutureCall, VoidFunc) {
 	fff, p := MakeFuturePipe(func(a interface{}) interface{} {
 		f(a)
@@ -164,8 +175,10 @@ func MakeFutureCallPipe(f MapCallFunc, argument interface{}) (FutureCall, VoidFu
 	return &baseFutureCall{fff}, p
 }
 
-// Same as MakeFuture, but the result FutureCall doesn't carry value
-// In fact it is impemented using MakeFutureCallPipe with wrapper func
+/*
+Same as MakeFuture, but the result FutureCall doesn't carry value
+In fact it is impemented using MakeFutureCallPipe with wrapper func
+*/
 func MakeFutureCall(f MapCallFunc, argument interface{}) FutureCall {
 	result, pipe := MakeFutureCallPipe(f, argument)
 	go pipe()
@@ -174,46 +187,57 @@ func MakeFutureCall(f MapCallFunc, argument interface{}) FutureCall {
 
 // A Parallel Executor is an executor that can execute tasks in parallel
 type ParallelExecutor interface {
-	// Start processing jobs. Note that jobs can be added before Start()
-	// but without start, Future will never materialize
-	// You can still add jobs after started. You can start before adding jobs even
+	/*
+	Start processing jobs. Note that jobs can be added before Start()
+	but without start, Future will never materialize
+	You can still add jobs after started. You can start before adding jobs even
+	*/
 	Start()
 
-	// Submit a producer func and get the result.
-	// The Future may be ready in the future. Or might be ready when you use it
-	// call result.Ready() to check whether it is completed
-	// call result.WaitT to wait for completion, with a timeout
-	// call result.Wait to wait forever for completion
+	/*
+	Submit a producer func and get the result.
+	The Future may be ready in the future. Or might be ready when you use it
+	call result.Ready() to check whether it is completed
+	call result.WaitT to wait for completion, with a timeout
+	call result.Wait to wait forever for completion
+	*/
 	Submit(f ProducerFunc) Future
 
-	// Submit a void func for executing. 
-	// The result represent a Future Completion status of the VoidFunc
-	// call result.Ready() to check whether it is completed
-	// call result.WaitT to wait for completion, with a timeout
-	// call result.Wait to wait forever for completion
+	/*
+	Submit a void func for executing. 
+	The result represent a Future Completion status of the VoidFunc
+	call result.Ready() to check whether it is completed
+	call result.WaitT to wait for completion, with a timeout
+	call result.Wait to wait forever for completion
+	*/
 	Call(f VoidFunc) FutureCall
 
-	// Stop accepting new calls, but all submitted tasks will be executed
-	// It is essentially closing the task queue channel
+	/*
+	Stop accepting new calls, but all submitted tasks will be executed
+	It is essentially closing the task queue channel
+	*/
 	Stop()
 
-	// Wait until all calls/funcs are done
-	// You must call Stop() first otherwise the goroutines will never end
+	/*
+	Wait until all calls/funcs are done
+	You must call Stop() first otherwise the goroutines will never end
+	*/
 	Wait()
 
-	// Active threads.
-	// Before start, it should be 0
-	// After start, it will quickly jump to Parallel settings
-	// After stop, it will slowly drop to 0.
-	// Use as a indicator only, don't assume 0 means the 
-	// Executor done all jobs. Instead, use Stop() and Wait()
+	/*
+	Active threads.
+	Before start, it should be 0
+	After start, it will quickly jump to Parallel settings
+	After stop, it will slowly drop to 0.
+	Use as a indicator only, don't assume 0 means the 
+	Executor done all jobs. Instead, use Stop() and Wait()
+	*/
 	Active() int
 
 	// Pending jobs count. It is len(queue)
 	Pending() int
 
-	// Return parallel configuration. 
-	// You can't adjust the threads dynamically
+	// Return parallel configuration. You can't adjust the threads dynamically
 	Parallel() int
 
 	// Test wehther the executor is running
@@ -339,14 +363,5 @@ will guarantee a termination with result.
 func NewExecutor(p int, qlength int) ParallelExecutor {
 	q := make(chan VoidFunc, qlength)
 
-	/*
-		// Mutex for PE modifications
-		mutex    *sync.Mutex
-		wg       *sync.WaitGroup // used for wait()
-		started  bool            // whether this had been started or not
-		running  int32           // running tasks
-		queue    chan VoidFunc   // task queue
-		parallel int
-	*/
 	return &basePE{new(sync.Mutex), new(sync.WaitGroup), false, 0, q, p, 0, 0}
 }
