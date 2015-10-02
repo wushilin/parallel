@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"reflect"
 )
 
 /*
@@ -24,18 +25,18 @@ type VoidFunc func()
 // ProducerFunc is a func that produces a result
 type ProducerFunc func() interface{}
 
-// Future represent a Value to be retrieved, and might be already ready, 
+// Future represent a Value to be retrieved, and might be already ready,
 // or will be ready in the future.
 type Future interface {
 	// Test wehther the value is ready
 	Ready() bool
 
 	/*
-	Wait for max of timeout milliseconds
-	for a value and return whether a value present or not
-	If second return value is false, the value returned 
-	should be nil. Do not use the value unless the second 
-	value is true
+		Wait for max of timeout milliseconds
+		for a value and return whether a value present or not
+		If second return value is false, the value returned
+		should be nil. Do not use the value unless the second
+		value is true
 	*/
 	WaitT(timeoutms int) (interface{}, bool)
 
@@ -124,7 +125,7 @@ func (v *baseFutureCall) Wait() {
 
 // Apply function f with argument argument
 // But will not run it. Instead, it return the future immediately
-// and a VoidFunc (func (){}). Caller can call the VoidFunc() to 
+// and a VoidFunc (func (){}). Caller can call the VoidFunc() to
 // Cause the Future to materialize.
 //
 // Example:
@@ -133,7 +134,7 @@ func (v *baseFutureCall) Wait() {
 //   }, 6)
 //   go f() <= this will start the actual func - without it the fut will never be ready
 //   fmt.Println(fut.Wait())
-// Note the f() is required before the fut.Wait() 
+// Note the f() is required before the fut.Wait()
 func MakeFuturePipe(f MapFunc, argument interface{}) (Future, VoidFunc) {
 	c := make(chan interface{}, 1)
 	ff := func() {
@@ -150,7 +151,7 @@ func MakeFuturePipe(f MapFunc, argument interface{}) (Future, VoidFunc) {
 	return &baseFuture{new(sync.Mutex), c, false, nil}, ff
 }
 
-/* 
+/*
 Make a function call as a future. A separate goroutine will be started to execute the code
 It is the same as:
   fut, pipe := MakeFuturePipe(f, argument)
@@ -191,65 +192,65 @@ func MakeFutureCall(f MapCallFunc, argument interface{}) FutureCall {
 // A Parallel Executor is an executor that can execute tasks in parallel
 type ParallelExecutor interface {
 	/*
-	Start processing jobs. Note that jobs can be added before Start()
-	
-	but without start, Future will never materialize
-	
-	You can still add jobs after started. You can start before adding jobs even
+		Start processing jobs. Note that jobs can be added before Start()
+
+		but without start, Future will never materialize
+
+		You can still add jobs after started. You can start before adding jobs even
 	*/
 	Start()
 
 	/*
-	Submit a producer func and get the result.
-	
-	The Future may be ready in the future. Or might be ready when you use it
-	
-	call result.Ready() to check whether it is completed
-	
-	call result.WaitT to wait for completion, with a timeout
-	
-	call result.Wait to wait forever for completion
+		Submit a producer func and get the result.
+
+		The Future may be ready in the future. Or might be ready when you use it
+
+		call result.Ready() to check whether it is completed
+
+		call result.WaitT to wait for completion, with a timeout
+
+		call result.Wait to wait forever for completion
 	*/
-	Submit(f ProducerFunc) Future
+	Submit(f interface{}) Future
 
 	/*
-	Submit a void func for executing. 
-	
-	The result represent a Future Completion status of the VoidFunc
-	
-	call result.Ready() to check whether it is completed
-	
-	call result.WaitT to wait for completion, with a timeout
-	
-	call result.Wait to wait forever for completion
+		Submit a void func for executing.
+
+		The result represent a Future Completion status of the VoidFunc
+
+		call result.Ready() to check whether it is completed
+
+		call result.WaitT to wait for completion, with a timeout
+
+		call result.Wait to wait forever for completion
 	*/
-	Call(f VoidFunc) FutureCall
+	Call(f interface{}) FutureCall
 
 	/*
-	Stop accepting new calls, but all submitted tasks will be executed
-	
-	It is essentially closing the task queue channel
+		Stop accepting new calls, but all submitted tasks will be executed
+
+		It is essentially closing the task queue channel
 	*/
 	Stop()
 
 	/*
-	Wait until all calls/funcs are done
-	
-	You must call Stop() first otherwise the goroutines will never end
+		Wait until all calls/funcs are done
+
+		You must call Stop() first otherwise the goroutines will never end
 	*/
 	Wait()
 
 	/*
-	Active threads.
-	Before start, it should be 0
-	
-	After start, it will quickly jump to Parallel settings
-	
-	After stop, it will slowly drop to 0.
-	
-	Use as a indicator only, don't assume 0 means the 
-	
-	Executor done all jobs. Instead, use Stop() and Wait()
+		Active threads.
+		Before start, it should be 0
+
+		After start, it will quickly jump to Parallel settings
+
+		After stop, it will slowly drop to 0.
+
+		Use as a indicator only, don't assume 0 means the
+
+		Executor done all jobs. Instead, use Stop() and Wait()
 	*/
 	Active() int
 
@@ -311,7 +312,8 @@ func (v *basePE) Start() {
 	v.started = true
 }
 
-func (v *basePE) Submit(f ProducerFunc) Future {
+func (v *basePE) Submit(iiff interface{}) Future {
+	f := toProducerFunc(iiff)
 	v.mutex.Lock()
 
 	result, pipe := MakeFuturePipe(func(dummy interface{}) interface{} {
@@ -324,7 +326,8 @@ func (v *basePE) Submit(f ProducerFunc) Future {
 	return result
 }
 
-func (v *basePE) Call(f VoidFunc) FutureCall {
+func (v *basePE) Call(iif interface{}) FutureCall {
+	f := toVoidFunc(iif)
 	v.mutex.Lock()
 
 	result, pipe := MakeFutureCallPipe(func(dummy interface{}) {
@@ -383,4 +386,59 @@ func NewExecutor(p int, qlength int) ParallelExecutor {
 	q := make(chan VoidFunc, qlength)
 
 	return &basePE{new(sync.Mutex), new(sync.WaitGroup), false, 0, q, p, 0, 0}
+}
+
+func toVoidFunc(arg interface{}) VoidFunc {
+	// arg must be a argument
+	fv := reflect.ValueOf(arg)
+	ft := reflect.TypeOf(arg)
+	if ft.Kind() != reflect.Func {
+		panic("Can't convert if arg isn't a function")
+	}
+	if ft.NumIn() != 0 {
+		panic("Can't convert to generate func with numin != 0")
+	}
+
+	return func()  {
+		args := make([]reflect.Value, 0)
+		if ft.IsVariadic() {
+			fv.CallSlice(args)
+		} else {
+			fv.Call(args)
+		}
+	}
+}
+func toProducerFunc(arg interface{}) ProducerFunc {
+	// arg must be a argument
+	fv := reflect.ValueOf(arg)
+	ft := reflect.TypeOf(arg)
+	if ft.Kind() != reflect.Func {
+		panic("Can't convert if arg isn't a function")
+	}
+	if ft.NumIn() != 0 {
+		panic("Can't convert to generate func with numin != 0")
+	}
+	if ft.NumOut() < 1 {
+		panic("Can't conver to generate func with numout < 1")
+	}
+	return func() interface{} {
+		args := make([]reflect.Value, 0)
+		var rv []reflect.Value
+		if ft.IsVariadic() {
+			rv = fv.CallSlice(args)
+		} else {
+			rv = fv.Call(args)
+		}
+		rvi := toInterfaces(rv)
+		return rvi[0]
+	}
+}
+
+
+func toInterfaces(args []reflect.Value) []interface{} {
+	result := make([]interface{}, len(args))
+	for idx, v := range args {
+		result[idx] = v.Interface()
+	}
+	return result
 }
